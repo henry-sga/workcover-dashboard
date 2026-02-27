@@ -43,8 +43,8 @@ def init_db():
         )
     """)
 
-    # Add email/phone columns if they don't exist (for existing databases)
-    for col in ("email", "phone"):
+    # Add columns if they don't exist (for existing databases)
+    for col in ("email", "phone", "injury_type"):
         try:
             c.execute(f"ALTER TABLE cases ADD COLUMN {col} TEXT")
         except Exception:
@@ -99,6 +99,17 @@ def init_db():
     """)
 
     c.execute("""
+        CREATE TABLE IF NOT EXISTS processed_coc_files (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            file_path TEXT NOT NULL UNIQUE,
+            case_id INTEGER,
+            processed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            status TEXT DEFAULT 'processed',
+            FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE SET NULL
+        )
+    """)
+
+    c.execute("""
         CREATE TABLE IF NOT EXISTS activity_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             case_id INTEGER,
@@ -127,6 +138,71 @@ def init_db():
         )
     """)
 
+    # Users table for login/roles
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            display_name TEXT NOT NULL,
+            role TEXT DEFAULT 'viewer',
+            email TEXT,
+            is_active INTEGER DEFAULT 1,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Audit trail — tracks all changes with who/what/when
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user TEXT DEFAULT 'system',
+            action TEXT NOT NULL,
+            table_name TEXT,
+            record_id INTEGER,
+            case_id INTEGER,
+            field_changed TEXT,
+            old_value TEXT,
+            new_value TEXT,
+            details TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Insurer correspondence tracker
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS correspondence (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            case_id INTEGER NOT NULL,
+            date TEXT NOT NULL,
+            direction TEXT DEFAULT 'Outbound',
+            contact_type TEXT DEFAULT 'Email',
+            contact_name TEXT,
+            subject TEXT,
+            summary TEXT,
+            follow_up_date TEXT,
+            follow_up_done INTEGER DEFAULT 0,
+            created_by TEXT DEFAULT 'system',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE
+        )
+    """)
+
+    # Calendar events
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS calendar_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            case_id INTEGER,
+            title TEXT NOT NULL,
+            event_date TEXT NOT NULL,
+            event_type TEXT DEFAULT 'Other',
+            description TEXT,
+            is_completed INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE SET NULL
+        )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -146,105 +222,120 @@ def seed_data():
          1238, "80%", "09240060334", "2024-10-22", "Active",
          "Terminate employment - inherent requirements. SGA premiums capped. Evidence of dishonesty and re-injury risk.",
          "Awaiting Henry/Mitch to action termination process", "HIGH",
-         "Returned from Iran. Engaged Zaparas lawyers. MRI done but results not provided."),
+         "Returned from Iran. Engaged Zaparas lawyers. MRI done but results not provided.",
+         "Manual Handling / Back"),
 
         ("Gzaw Shenkute", "VIC", "SRS", "Alola", "2024-12-12",
          "Lower back pain - broad-based disc prolapse. Extensive lumbar spine degeneration.", "No Capacity", "N/A",
          None, "N/A", None, "2024-12-12", "Active",
          "Terminate employment - inherent requirements. Highly unlikely to return to cleaning duties.",
          "Awaiting Henry/Mitch to action termination. Allows insurer to pursue new employment services.", "HIGH",
-         "Incident not reported initially. Communicated via son. Insurance authorised payments."),
+         "Incident not reported initially. Communicated via son. Insurance authorised payments.",
+         "Manual Handling / Back"),
 
         ("Ahmad Osmani", "VIC", "SGA", "Inghams", "2025-04-01",
          "Lower back pain - posterior disc bulge. L5/S1 disc bulge, foraminal stenosis.", "No Capacity", "N/A",
          1308, "80%", "09240069911", "2025-04-01", "Active",
          "Terminate employment - show cause or inherent requirements. SGA premiums capped.",
          "Awaiting Henry/Mitch to action termination process", "HIGH",
-         "Only 23yo, worked 4 months. Engaged Zaparas lawyers. Diagnosis more like progressive degeneration."),
+         "Only 23yo, worked 4 months. Engaged Zaparas lawyers. Diagnosis more like progressive degeneration.",
+         "Manual Handling / Back"),
 
         ("Senait Hailu", "VIC", "Unknown", "Unknown", "2025-03-25",
          "Hand/arm injury", "Modified Duties", "Pre-injury hours",
          None, "95%", None, "2025-03-25", "Active",
          "Continue modified duties. Performing majority of role with non-injured hand.",
          "Obtain updated COC - last expired 07/12/2025", "MEDIUM",
-         "Role is predominantly drying machinery with cloth. Still on modified duties completing pre-injury hours."),
+         "Role is predominantly drying machinery with cloth. Still on modified duties completing pre-injury hours.",
+         "Laceration / Cut"),
 
         ("Tarnny Bloor", "VIC", "Buna", "Tibaldi", "2025-06-04",
          "Right arm fracture (4th metacarpal) from conveyor", "Modified Duties", "Pre-injury hours (16hrs/wk)",
          None, "95%", None, "2025-06-04", "Active",
          "Be patient until healing completes. Not premium impacting.",
          "Continue current duties. Monitor for clearance.", "LOW",
-         "Working pre-injury hours, contributing well. No concerns."),
+         "Working pre-injury hours, contributing well. No concerns.",
+         "Crush / Fracture"),
 
         ("Tofik Abdishekur", "VIC", "Unknown", "Unknown", None,
          "Unknown - medical certificates in file", "Unknown", "Unknown",
          None, "N/A", None, None, "Active",
          "Insufficient information. Review required.",
          "Determine current status. Latest medical cert expired 09/01/2026.", "MEDIUM",
-         "Limited documentation. Has clearance certificate dated 01/01/2026 - may be closeable."),
+         "Limited documentation. Has clearance certificate dated 01/01/2026 - may be closeable.",
+         "Unknown"),
 
         ("Shane Tapper", "NSW", "Myola", "Casino", "2024-04-02",
          "Right index finger crush and partial amputation", "Uncertain", "N/A",
          1081, "95%", None, "2024-04-02", "Active",
          "Re-commencing employment. ORP suggested modified role as permanent position.",
          "Confirm re-commencement details. Obtain current COC.", "MEDIUM",
-         "Post-op complications. Shane declined further amputation. Longest running active case."),
+         "Post-op complications. Shane declined further amputation. Longest running active case.",
+         "Crush / Fracture"),
 
         ("Shannon Kelly", "NSW", "Myola", "Casino", "2024-03-06",
          "Chronic Q-fever", "No Capacity", "N/A",
          None, "N/A", "6826218", "2024-03-06", "Active",
          "Terminate employment - show cause or inherent requirements. No chance of returning to cleaning.",
          "Awaiting Henry/Mitch to action termination. Stop leave entitlement accrual.", "HIGH",
-         "Paid and managed directly by insurance. Empty case folder."),
+         "Paid and managed directly by insurance. Empty case folder.",
+         "Disease / Illness"),
 
         ("Kaleb Gaulton", "NSW", "Myola", "Casino", "2025-10-25",
          "Right middle finger crush and laceration", "Modified Duties", "5 hrs x 3 days",
          None, "95%", None, "2025-10-25", "Active",
          "Progressing well. Pain gone, just stiffness. Hoping for full capacity soon.",
          "Monitor for full capacity clearance. COC expires 13/03/2026.", "LOW",
-         "Good prognosis. Employee reports pain gone, finger just a little stiff."),
+         "Good prognosis. Employee reports pain gone, finger just a little stiff.",
+         "Crush / Fracture"),
 
         ("Damien McFarland", "NSW", "Myola", "Booyong", "2025-12-10",
          "Left thumb dislocation + wrist aggravation", "Modified Duties", "4 hrs x 4 days",
          None, "95%", "8712267", "2025-12-10", "Active",
          "Ensure compliance with doctor restrictions and RTW arrangements.",
          "COC expires 27/02/2026 - obtain new certificate.", "MEDIUM",
-         "Was progressing well but re-aggravated injury lifting 8kg table outside capacity."),
+         "Was progressing well but re-aggravated injury lifting 8kg table outside capacity.",
+         "Sprain / Strain"),
 
         ("Ashley Hill", "NSW", "Myola", "Casino", "2026-01-14",
          "Knee injury from stepping on drainage hole. No meniscus tear.", "Modified Duties", "3 hrs x 4 days",
          779, "95%", None, "2026-01-14", "Active",
          "Provide modified duties until clearance. Strict performance reviews post-clearance.",
          "Continue modified duties. COC expires 12/03/2026.", "MEDIUM",
-         "2nd workcover claim in 6 months + 2023 injury. Reports suggest possible exaggeration. High re-injury risk."),
+         "2nd workcover claim in 6 months + 2023 injury. Reports suggest possible exaggeration. High re-injury risk.",
+         "Sprain / Strain"),
 
         ("Andrew Fitzgerald", "NSW", "Myola", "Booyong", "2026-01-15",
          "Chemical burn on back", "Full Capacity", "Pre-injury",
          None, "N/A", None, "2026-01-15", "Active",
          "No further action. Only 10 days incapacity.",
          "Close claim.", "LOW",
-         "Back to full duties from 17/01/2026. Simple case."),
+         "Back to full duties from 17/01/2026. Simple case.",
+         "Chemical"),
 
         ("Jacob Benn", "NSW", "Myola", "Casino", None,
          "Hand injury / knee claim", "Full Capacity", "Pre-injury",
          2550, "95%", None, None, "Active",
          "Full capacity achieved. Claim open for medical expenses only.",
          "Monitor hand stiffness. Consider if claim is closeable.", "LOW",
-         "Complaining of hand stiffness in mornings - suspected from overtime."),
+         "Complaining of hand stiffness in mornings - suspected from overtime.",
+         "Sprain / Strain"),
 
         ("Ying Lin", "QLD", "One Harvest", "One Harvest", "2026-01-31",
          "Toe injury", "Modified Duties", "Pre-injury hours",
          None, "95%", None, "2026-01-31", "Active",
          "Continue current arrangement until clearance.",
          "COC expired 25/02/2026 - obtain new certificate or clearance URGENTLY.", "HIGH",
-         "Working pre-injury hours on modified duties. Simple claim."),
+         "Working pre-injury hours on modified duties. Simple claim.",
+         "Crush / Fracture"),
 
         ("Asrat Bogale", "QLD", "Unknown", "Unknown", None,
          "Foot injury", "Unknown", "Unknown",
          1120, "95%", None, None, "Active",
          "Had pre-injury capacity as of 18/11. Review if closeable.",
          "Confirm clearance status. Consider closing case.", "MEDIUM",
-         "Last COC expired 17/07/2025. May be ready to close."),
+         "Last COC expired 17/07/2025. May be ready to close.",
+         "Sprain / Strain"),
     ]
 
     for case in cases:
@@ -252,8 +343,8 @@ def seed_data():
             INSERT INTO cases (worker_name, state, entity, site, date_of_injury,
                 injury_description, current_capacity, shift_structure,
                 piawe, reduction_rate, claim_number, claim_start_date, status,
-                strategy, next_action, priority, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                strategy, next_action, priority, notes, injury_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, case)
 
     conn.commit()
