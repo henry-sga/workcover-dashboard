@@ -1,5 +1,7 @@
 import sqlite3
 import os
+import hashlib
+import secrets
 from datetime import datetime, date, timedelta
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "workcover.db")
@@ -144,11 +146,54 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT NOT NULL UNIQUE,
             password_hash TEXT NOT NULL,
+            salt TEXT NOT NULL,
             display_name TEXT NOT NULL,
             role TEXT DEFAULT 'viewer',
             email TEXT,
+            entity TEXT,
+            site TEXT,
             is_active INTEGER DEFAULT 1,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Add salt column if missing (for existing databases)
+    for col in ("salt", "entity", "site"):
+        try:
+            c.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
+        except Exception:
+            pass
+
+    # Incident reports — submitted by site managers
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS incidents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            submitted_by INTEGER,
+            worker_name TEXT NOT NULL,
+            date_of_incident TEXT NOT NULL,
+            time_of_incident TEXT,
+            site TEXT,
+            entity TEXT,
+            state TEXT,
+            location_detail TEXT,
+            injury_description TEXT,
+            body_part TEXT,
+            injury_type TEXT,
+            first_aid_given TEXT,
+            first_aid_details TEXT,
+            witnesses TEXT,
+            immediate_action TEXT,
+            supervisor_name TEXT,
+            supervisor_phone TEXT,
+            status TEXT DEFAULT 'Pending',
+            reviewed_by INTEGER,
+            reviewed_at TEXT,
+            converted_case_id INTEGER,
+            notes TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (submitted_by) REFERENCES users(id),
+            FOREIGN KEY (reviewed_by) REFERENCES users(id),
+            FOREIGN KEY (converted_case_id) REFERENCES cases(id)
         )
     """)
 
@@ -205,6 +250,69 @@ def init_db():
 
     conn.commit()
     conn.close()
+
+
+def hash_password(password: str, salt: str = None) -> tuple:
+    """Hash a password with a salt. Returns (hash, salt)."""
+    if salt is None:
+        salt = secrets.token_hex(16)
+    pw_hash = hashlib.sha256((salt + password).encode()).hexdigest()
+    return pw_hash, salt
+
+
+def verify_password(password: str, stored_hash: str, salt: str) -> bool:
+    """Verify a password against stored hash and salt."""
+    pw_hash = hashlib.sha256((salt + password).encode()).hexdigest()
+    return pw_hash == stored_hash
+
+
+def create_user(username, password, display_name, role="viewer", email=None, entity=None, site=None):
+    """Create a new user. Returns user id or None if username exists."""
+    conn = get_connection()
+    pw_hash, salt = hash_password(password)
+    try:
+        conn.execute(
+            """INSERT INTO users (username, password_hash, salt, display_name, role, email, entity, site)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (username, pw_hash, salt, display_name, role, email, entity, site)
+        )
+        conn.commit()
+        user_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        conn.close()
+        return user_id
+    except sqlite3.IntegrityError:
+        conn.close()
+        return None
+
+
+def authenticate_user(username, password):
+    """Authenticate a user. Returns user dict or None."""
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM users WHERE username = ? AND is_active = 1", (username,)).fetchone()
+    conn.close()
+    if not row:
+        return None
+    salt = row["salt"] if row["salt"] else ""
+    if verify_password(password, row["password_hash"], salt):
+        return dict(row)
+    return None
+
+
+def get_all_users():
+    """Get all users."""
+    conn = get_connection()
+    rows = conn.execute("SELECT id, username, display_name, role, email, entity, site, is_active, created_at FROM users ORDER BY role, display_name").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def seed_default_admin():
+    """Create default admin user if no users exist."""
+    conn = get_connection()
+    count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    conn.close()
+    if count == 0:
+        create_user("admin", "admin123", "Administrator", role="admin", email="admin@claimtrackpro.com.au")
 
 
 def seed_data():

@@ -613,6 +613,7 @@ st.markdown("""
 
 db.init_db()
 db.seed_data()
+db.seed_default_admin()
 
 # --- Helpers ---
 
@@ -851,16 +852,46 @@ if "selected_case_id" not in st.session_state:
     st.session_state.selected_case_id = None
 if "prev_page" not in st.session_state:
     st.session_state.prev_page = "Dashboard"
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+if "current_user" not in st.session_state:
+    st.session_state.current_user = None
+if "user_role" not in st.session_state:
+    st.session_state.user_role = None
+if "user_display_name" not in st.session_state:
+    st.session_state.user_display_name = None
+if "user_id" not in st.session_state:
+    st.session_state.user_id = None
 
-# --- Navigation: query params handled FIRST (works on all pages including Landing) ---
+# Helper: check if user is logged in
+def require_auth():
+    """Returns True if authenticated, False otherwise (redirects to login)."""
+    if not st.session_state.authenticated:
+        st.session_state.page = "Login"
+        st.rerun()
+        return False
+    return True
 
+def user_has_role(*roles):
+    """Check if the current user has one of the given roles."""
+    return st.session_state.user_role in roles
+
+# Role-based page access
+ADMIN_PAGES = ["Activity Log"]
+MANAGER_PAGES = ["Dashboard", "All Cases", "Incident Report", "COC Tracker",
+                 "Calendar", "Correspondence"]
+VIEWER_PAGES = ["Dashboard", "All Cases"]
+
+# All nav items
 NAV_ITEMS = ["Dashboard", "All Cases", "Entitlements", "Calendar",
              "COC Tracker", "Correspondence", "Terminations",
              "Injury Analytics", "Site Analysis",
-             "PIAWE Calculator", "Payroll", "Activity Log"]
+             "PIAWE Calculator", "Payroll", "Activity Log",
+             "Incident Report", "Incidents Review", "Manage Users"]
 
 page = st.session_state.page
 
+# --- Navigation: query params handled FIRST ---
 _nav_param = st.query_params.get("nav")
 if _nav_param:
     st.query_params.clear()
@@ -878,10 +909,14 @@ if _nav_param:
         st.session_state.page = "New Case"
         st.rerun()
     elif _nav_param == "login":
-        st.session_state.page = "Dashboard"
-        st.session_state.selected_case_id = None
+        st.session_state.page = "Login"
         st.rerun()
     elif _nav_param == "logout":
+        st.session_state.authenticated = False
+        st.session_state.current_user = None
+        st.session_state.user_role = None
+        st.session_state.user_display_name = None
+        st.session_state.user_id = None
         st.session_state.page = "Landing"
         st.session_state.selected_case_id = None
         st.rerun()
@@ -894,22 +929,40 @@ if _nav_param:
         st.session_state.selected_case_id = None
         st.rerun()
 
-# --- Top Navigation Bar + Sidebar (hidden on Landing page) ---
+# --- Top Navigation Bar + Sidebar (hidden on Landing and Login pages) ---
 
-# Default filter values (used when Landing page skips sidebar)
+# Default filter values
 filter_state = ["VIC", "NSW", "QLD"]
 filter_capacity = ["No Capacity", "Modified Duties", "Full Capacity", "Uncertain", "Unknown"]
 filter_priority = ["HIGH", "MEDIUM", "LOW"]
 
-if page != "Landing":
-    # Dropdown groupings for nav bar
-    NAV_GROUPS = [
-        ("Cases", ["Dashboard", "All Cases"]),
-        ("Tracking", ["COC Tracker", "Calendar", "Correspondence", "Terminations"]),
-        ("Reports", ["Injury Analytics", "Site Analysis", "Entitlements"]),
-        ("Tools", ["PIAWE Calculator", "Payroll"]),
-        ("Admin", ["Activity Log"]),
-    ]
+if page not in ("Landing", "Login"):
+    # Redirect to login if not authenticated
+    if not st.session_state.authenticated:
+        st.session_state.page = "Login"
+        st.rerun()
+
+    _role = st.session_state.user_role or "viewer"
+
+    # Build nav groups based on role
+    if _role == "admin":
+        NAV_GROUPS = [
+            ("Cases", ["Dashboard", "All Cases"]),
+            ("Tracking", ["COC Tracker", "Calendar", "Correspondence", "Terminations"]),
+            ("Reports", ["Injury Analytics", "Site Analysis", "Entitlements"]),
+            ("Tools", ["PIAWE Calculator", "Payroll"]),
+            ("Admin", ["Activity Log", "Incidents Review", "Manage Users"]),
+        ]
+    elif _role == "manager":
+        NAV_GROUPS = [
+            ("Cases", ["Dashboard", "All Cases"]),
+            ("Tracking", ["COC Tracker", "Calendar", "Correspondence"]),
+            ("Report", ["Incident Report"]),
+        ]
+    else:  # viewer
+        NAV_GROUPS = [
+            ("Cases", ["Dashboard", "All Cases"]),
+        ]
 
     _on_dashboard = (page == "Dashboard")
 
@@ -918,7 +971,8 @@ if page != "Landing":
     _back_class = "disabled" if _on_dashboard else ""
     _nav_html = f'<a class="{_back_class}" href="?nav=back"{_T}>← Back</a>'
     _nav_html += f'<a class="{_back_class}" href="?nav=home"{_T}>Home</a>'
-    _nav_html += f'<a class="new-btn" href="?nav=new"{_T}>+ New Case</a>'
+    if _role == "admin":
+        _nav_html += f'<a class="new-btn" href="?nav=new"{_T}>+ New Case</a>'
 
     for group_label, group_items in NAV_GROUPS:
         group_has_active = page in group_items
@@ -939,9 +993,12 @@ if page != "Landing":
 
     st.markdown(f'<div class="topnav-bar">{_nav_html}</div>', unsafe_allow_html=True)
 
-    # --- Sidebar: Filters only ---
+    # --- Sidebar ---
     st.sidebar.title("🛡️ ClaimTrack Pro")
     st.sidebar.caption(f"Today: {date.today().strftime('%d %b %Y')}")
+    _disp = st.session_state.user_display_name or st.session_state.current_user or ""
+    _role_label = (st.session_state.user_role or "").title()
+    st.sidebar.markdown(f"**{_disp}** ({_role_label})")
     st.sidebar.divider()
     st.sidebar.caption("Filters")
 
@@ -1255,6 +1312,273 @@ if page == "Landing":
         <p style="margin-top:1.5rem; font-size:0.8rem;">Questions? Contact us at hello@claimtrackpro.com.au</p>
     </div>
     """, unsafe_allow_html=True)
+
+
+# ============================================================
+# LOGIN PAGE
+# ============================================================
+elif page == "Login":
+    st.markdown("")
+    _lc1, _lc2, _lc3 = st.columns([1, 1.5, 1])
+    with _lc2:
+        st.markdown("""
+        <div style="text-align:center; margin-bottom:1.5rem;">
+            <h2 style="color:#1E3A5F !important;">🛡️ ClaimTrack Pro</h2>
+            <p style="color:#6C757D;">Sign in to your account</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        with st.form("login_form"):
+            _login_user = st.text_input("Username")
+            _login_pass = st.text_input("Password", type="password")
+            _login_btn = st.form_submit_button("Sign In", use_container_width=True, type="primary")
+
+            if _login_btn:
+                if _login_user and _login_pass:
+                    _auth_result = db.authenticate_user(_login_user.strip(), _login_pass)
+                    if _auth_result:
+                        st.session_state.authenticated = True
+                        st.session_state.current_user = _auth_result["username"]
+                        st.session_state.user_role = _auth_result["role"]
+                        st.session_state.user_display_name = _auth_result["display_name"]
+                        st.session_state.user_id = _auth_result["id"]
+                        st.session_state.page = "Dashboard"
+                        st.rerun()
+                    else:
+                        st.error("Invalid username or password")
+                else:
+                    st.warning("Please enter both username and password")
+
+        st.markdown("")
+        st.markdown('<div style="text-align:center;"><a href="?nav=landing" target="_parent" style="color:#6C757D; font-size:0.85rem;">← Back to home</a></div>', unsafe_allow_html=True)
+
+        st.markdown("")
+        st.info("**Demo login:** username `admin` / password `admin123`")
+
+
+# ============================================================
+# INCIDENT REPORT PAGE (for managers/supervisors)
+# ============================================================
+elif page == "Incident Report":
+    require_auth()
+    st.title("📋 Lodge Incident Report")
+    st.caption("Submit an incident report for review by the admin team.")
+
+    with st.form("incident_form"):
+        st.markdown("##### Worker Details")
+        _ic1, _ic2 = st.columns(2)
+        with _ic1:
+            _inc_worker = st.text_input("Worker Name *")
+            _inc_site = st.text_input("Site / Location")
+            _inc_entity = st.text_input("Entity / Company")
+        with _ic2:
+            _inc_state = st.selectbox("State", ["VIC", "NSW", "QLD", "SA", "TAS", "WA"])
+            _inc_date = st.date_input("Date of Incident *", format="DD/MM/YYYY")
+            _inc_time = st.text_input("Time of Incident (e.g. 10:30 AM)")
+
+        st.markdown("##### Incident Details")
+        _inc_location = st.text_input("Specific location (e.g. warehouse floor, bathroom, loading dock)")
+        _inc_desc = st.text_area("Description of incident and injury *", height=120)
+        _id1, _id2 = st.columns(2)
+        with _id1:
+            _inc_body = st.text_input("Body part injured")
+            _inc_type = st.selectbox("Injury type", ["-- Select --", "Manual Handling / Back",
+                "Laceration / Cut", "Crush / Fracture", "Sprain / Strain", "Chemical",
+                "Slip / Trip / Fall", "Disease / Illness", "Burns", "Other"])
+        with _id2:
+            _inc_firstaid = st.selectbox("First aid given?", ["Yes", "No"])
+            _inc_firstaid_detail = st.text_input("First aid details (if applicable)")
+
+        st.markdown("##### Additional Information")
+        _inc_witnesses = st.text_area("Witnesses (names and contact details)", height=60)
+        _inc_action = st.text_area("Immediate action taken", height=60)
+        _ia1, _ia2 = st.columns(2)
+        with _ia1:
+            _inc_super_name = st.text_input("Supervisor name", value=st.session_state.user_display_name or "")
+        with _ia2:
+            _inc_super_phone = st.text_input("Supervisor contact phone")
+
+        _inc_notes = st.text_area("Additional notes", height=60)
+
+        _inc_submit = st.form_submit_button("Submit Incident Report", use_container_width=True, type="primary")
+
+        if _inc_submit:
+            if not _inc_worker or not _inc_desc:
+                st.error("Worker name and incident description are required.")
+            else:
+                conn = db.get_connection()
+                conn.execute("""
+                    INSERT INTO incidents (submitted_by, worker_name, date_of_incident, time_of_incident,
+                        site, entity, state, location_detail, injury_description, body_part, injury_type,
+                        first_aid_given, first_aid_details, witnesses, immediate_action,
+                        supervisor_name, supervisor_phone, notes)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    st.session_state.user_id,
+                    _inc_worker, str(_inc_date), _inc_time,
+                    _inc_site, _inc_entity, _inc_state, _inc_location,
+                    _inc_desc, _inc_body,
+                    _inc_type if _inc_type != "-- Select --" else None,
+                    _inc_firstaid, _inc_firstaid_detail,
+                    _inc_witnesses, _inc_action,
+                    _inc_super_name, _inc_super_phone, _inc_notes,
+                ))
+                conn.commit()
+                conn.close()
+                st.success("Incident report submitted successfully! The admin team will review it shortly.")
+                log_activity(None, "Incident submitted", f"Worker: {_inc_worker}, by {st.session_state.current_user}")
+
+
+# ============================================================
+# INCIDENTS REVIEW PAGE (admin only)
+# ============================================================
+elif page == "Incidents Review":
+    require_auth()
+    if not user_has_role("admin"):
+        st.error("You don't have permission to access this page.")
+    else:
+        st.title("📋 Incident Reports — Review Queue")
+
+        conn = db.get_connection()
+        incidents = pd.read_sql_query("""
+            SELECT i.*, u.display_name as submitted_by_name
+            FROM incidents i
+            LEFT JOIN users u ON i.submitted_by = u.id
+            ORDER BY
+                CASE i.status WHEN 'Pending' THEN 0 WHEN 'Reviewed' THEN 1 ELSE 2 END,
+                i.created_at DESC
+        """, conn)
+        conn.close()
+
+        if len(incidents) == 0:
+            st.info("No incident reports yet.")
+        else:
+            _pending = incidents[incidents["status"] == "Pending"]
+            _reviewed = incidents[incidents["status"] != "Pending"]
+
+            if len(_pending) > 0:
+                st.markdown(f"### Pending Review ({len(_pending)})")
+                for _, inc in _pending.iterrows():
+                    with st.container(border=True):
+                        _c1, _c2, _c3 = st.columns([3, 2, 1])
+                        with _c1:
+                            st.markdown(f"**{inc['worker_name']}** — {inc['injury_description'][:80]}...")
+                            st.caption(f"Site: {inc['site'] or 'N/A'} | State: {inc['state'] or 'N/A'} | Date: {inc['date_of_incident']}")
+                        with _c2:
+                            st.caption(f"Submitted by: {inc['submitted_by_name'] or 'Unknown'}")
+                            st.caption(f"Body part: {inc['body_part'] or 'N/A'} | Type: {inc['injury_type'] or 'N/A'}")
+                        with _c3:
+                            if st.button("Convert to Case", key=f"convert_{inc['id']}", type="primary"):
+                                # Create case from incident
+                                _conn = db.get_connection()
+                                _conn.execute("""
+                                    INSERT INTO cases (worker_name, state, entity, site, date_of_injury,
+                                        injury_description, injury_type, current_capacity, status, priority,
+                                        notes)
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, 'Unknown', 'Active', 'MEDIUM', ?)
+                                """, (
+                                    inc["worker_name"], inc["state"] or "VIC",
+                                    inc["entity"], inc["site"], inc["date_of_incident"],
+                                    inc["injury_description"], inc["injury_type"],
+                                    f"From incident report. First aid: {inc['first_aid_given']}. Witnesses: {inc['witnesses'] or 'None'}",
+                                ))
+                                _new_case_id = _conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+                                # Mark incident as reviewed
+                                _conn.execute("""
+                                    UPDATE incidents SET status = 'Converted', reviewed_by = ?,
+                                        reviewed_at = ?, converted_case_id = ?
+                                    WHERE id = ?
+                                """, (st.session_state.user_id, datetime.now().isoformat(), _new_case_id, inc["id"]))
+                                _conn.commit()
+                                # Seed document checklist for new case
+                                _doc_types = ["Incident Report", "Claim Form", "Payslips (12 months)",
+                                    "PIAWE Calculation", "Certificate of Capacity (Current)",
+                                    "RTW Plan (Current)", "Suitable Duties Plan", "Medical Certificates",
+                                    "Insurance Correspondence", "Wage Records"]
+                                for _dt in _doc_types:
+                                    _is_present = 1 if _dt == "Incident Report" else 0
+                                    _conn.execute("INSERT INTO documents (case_id, doc_type, is_present) VALUES (?, ?, ?)",
+                                                  (_new_case_id, _dt, _is_present))
+                                _conn.commit()
+                                _conn.close()
+                                log_activity(_new_case_id, "Case created from incident", f"Incident #{inc['id']} by {st.session_state.current_user}")
+                                st.success(f"Case created for {inc['worker_name']}! (Case #{_new_case_id})")
+                                st.rerun()
+
+                            if st.button("Dismiss", key=f"dismiss_{inc['id']}"):
+                                _conn = db.get_connection()
+                                _conn.execute("UPDATE incidents SET status = 'Dismissed', reviewed_by = ?, reviewed_at = ? WHERE id = ?",
+                                              (st.session_state.user_id, datetime.now().isoformat(), inc["id"]))
+                                _conn.commit()
+                                _conn.close()
+                                st.rerun()
+
+            if len(_reviewed) > 0:
+                st.markdown(f"### Processed ({len(_reviewed)})")
+                for _, inc in _reviewed.iterrows():
+                    with st.container(border=True):
+                        _status_icon = "✅" if inc["status"] == "Converted" else "❌"
+                        st.markdown(f"{_status_icon} **{inc['worker_name']}** — {inc['status']} — {inc['date_of_incident']}")
+                        if inc["converted_case_id"]:
+                            st.caption(f"Converted to Case #{int(inc['converted_case_id'])}")
+
+
+# ============================================================
+# MANAGE USERS PAGE (admin only)
+# ============================================================
+elif page == "Manage Users":
+    require_auth()
+    if not user_has_role("admin"):
+        st.error("You don't have permission to access this page.")
+    else:
+        st.title("👥 Manage Users")
+
+        # Show existing users
+        users = db.get_all_users()
+        if users:
+            st.markdown("### Current Users")
+            _user_df = pd.DataFrame(users)
+            _user_df["is_active"] = _user_df["is_active"].map({1: "✅ Active", 0: "❌ Inactive"})
+            st.dataframe(_user_df[["username", "display_name", "role", "email", "entity", "site", "is_active"]],
+                         use_container_width=True, hide_index=True)
+
+        st.markdown("---")
+        st.markdown("### Add New User")
+
+        with st.form("add_user_form"):
+            _au1, _au2 = st.columns(2)
+            with _au1:
+                _new_username = st.text_input("Username *")
+                _new_password = st.text_input("Password *", type="password")
+                _new_display = st.text_input("Display Name *")
+            with _au2:
+                _new_role = st.selectbox("Role", ["manager", "viewer", "admin"])
+                _new_email = st.text_input("Email")
+                _new_entity = st.text_input("Entity (optional)")
+            _new_site = st.text_input("Site (optional — restricts manager to this site)")
+
+            st.markdown("")
+            st.caption("**Roles:** Admin = full access | Manager = dashboard + incident reports + tracking | Viewer = read-only dashboard")
+
+            if st.form_submit_button("Create User", type="primary"):
+                if not _new_username or not _new_password or not _new_display:
+                    st.error("Username, password, and display name are required.")
+                else:
+                    _uid = db.create_user(
+                        _new_username.strip().lower(),
+                        _new_password,
+                        _new_display.strip(),
+                        role=_new_role,
+                        email=_new_email or None,
+                        entity=_new_entity or None,
+                        site=_new_site or None,
+                    )
+                    if _uid:
+                        st.success(f"User '{_new_username}' created successfully!")
+                        log_audit("create_user", "users", _uid, details=f"Created user {_new_username} with role {_new_role}")
+                        st.rerun()
+                    else:
+                        st.error(f"Username '{_new_username}' already exists.")
 
 
 # ============================================================
