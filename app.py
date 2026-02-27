@@ -17,7 +17,7 @@ ACTIVE_CASES_DIR = os.path.join(os.path.dirname(__file__), "..", "Active Cases")
 SITE_LIST = ["-- Select --", "Other"]
 
 st.set_page_config(
-    page_title="SGA Workcover Dashboard",
+    page_title="ClaimTrack Pro",
     page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -940,7 +940,7 @@ if page != "Landing":
     st.markdown(f'<div class="topnav-bar">{_nav_html}</div>', unsafe_allow_html=True)
 
     # --- Sidebar: Filters only ---
-    st.sidebar.title("🛡️ SGA Workcover")
+    st.sidebar.title("🛡️ ClaimTrack Pro")
     st.sidebar.caption(f"Today: {date.today().strftime('%d %b %Y')}")
     st.sidebar.divider()
     st.sidebar.caption("Filters")
@@ -964,7 +964,8 @@ if page == "Landing":
     # --- Hero Banner ---
     st.markdown("""
     <div class="landing-hero">
-        <h1>Take Control of Your Workcover Claims</h1>
+        <h1>ClaimTrack Pro</h1>
+        <p style="font-size:1.3rem; color:#FFFFFF; margin-bottom:0.3rem; font-weight:600;">Take Control of Your Workcover Claims</p>
         <p>The all-in-one platform that saves time, reduces premiums, and ensures you never miss a deadline.</p>
         <div class="hero-buttons">
             <a class="hero-btn hero-btn-primary" href="#roi-calc">Calculate Your Savings</a>
@@ -1036,7 +1037,7 @@ if page == "Landing":
             </div>
             <div style="font-size:0.88rem; color:#4A5568; margin-bottom:1rem;">For businesses up to 50 employees</div>
             <a class="pricing-cta" href="?nav=login" target="_parent">Get Started →</a>
-            <div class="pricing-note">Enterprise (50+ employees)? <a href="mailto:hello@sgaworkcover.com.au">Contact us</a></div>
+            <div class="pricing-note">Enterprise (50+ employees)? <a href="mailto:hello@claimtrackpro.com.au">Contact us</a></div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -1247,11 +1248,11 @@ if page == "Landing":
     # --- Footer CTA ---
     st.markdown("""
     <div class="landing-footer">
-        <h3>Ready to Take Control of Your Workcover Claims?</h3>
+        <h3>Ready to Get Started with ClaimTrack Pro?</h3>
         <p style="margin-bottom: 1.2rem;">Join Australian businesses already saving time and money with smarter claim management.</p>
         <a class="hero-btn hero-btn-primary" href="?nav=login" target="_parent" style="margin-right:10px;">Get Started →</a>
         <a class="hero-btn hero-btn-login" href="?nav=login" target="_parent">Login</a>
-        <p style="margin-top:1.5rem; font-size:0.8rem;">Questions? Contact us at hello@sgaworkcover.com.au</p>
+        <p style="margin-top:1.5rem; font-size:0.8rem;">Questions? Contact us at hello@claimtrackpro.com.au</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -2161,7 +2162,7 @@ elif page == "Case Detail":
 elif page == "Dashboard":
     # Title row with New Case button
     title_col, btn_col = st.columns([4, 1])
-    title_col.title("Workcover Case Management Dashboard")
+    title_col.title("ClaimTrack Pro — Dashboard")
     if btn_col.button("➕ New Case", type="primary", use_container_width=True):
         st.session_state.page = "New Case"
         st.rerun()
