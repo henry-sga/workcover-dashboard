@@ -1031,6 +1031,13 @@ if page == "Landing":
     </div>
     """, unsafe_allow_html=True)
 
+    # Streamlit button fallback for login (HTML links may not work on all hosts)
+    _hero_c1, _hero_c2, _hero_c3 = st.columns([2, 1, 2])
+    with _hero_c2:
+        if st.button("Login / Get Started", type="primary", use_container_width=True):
+            st.session_state.page = "Login"
+            st.rerun()
+
     st.markdown("")  # spacer
 
     # --- Pain Points ---
@@ -1093,10 +1100,12 @@ if page == "Landing":
                 <div>✅ Email support</div>
             </div>
             <div style="font-size:0.88rem; color:#4A5568; margin-bottom:1rem;">For businesses up to 50 employees</div>
-            <a class="pricing-cta" href="?nav=login" target="_parent">Get Started →</a>
-            <div class="pricing-note">Enterprise (50+ employees)? <a href="mailto:hello@claimtrackpro.com.au">Contact us</a></div>
+            <div class="pricing-note" style="margin-top:1rem;">Enterprise (50+ employees)? <a href="mailto:hello@claimtrackpro.com.au">Contact us</a></div>
         </div>
         """, unsafe_allow_html=True)
+        if st.button("Get Started →", type="primary", use_container_width=True, key="pricing_login"):
+            st.session_state.page = "Login"
+            st.rerun()
 
     st.markdown("")
     st.markdown("---")
@@ -1307,11 +1316,14 @@ if page == "Landing":
     <div class="landing-footer">
         <h3>Ready to Get Started with ClaimTrack Pro?</h3>
         <p style="margin-bottom: 1.2rem;">Join Australian businesses already saving time and money with smarter claim management.</p>
-        <a class="hero-btn hero-btn-primary" href="?nav=login" target="_parent" style="margin-right:10px;">Get Started →</a>
-        <a class="hero-btn hero-btn-login" href="?nav=login" target="_parent">Login</a>
         <p style="margin-top:1.5rem; font-size:0.8rem;">Questions? Contact us at hello@claimtrackpro.com.au</p>
     </div>
     """, unsafe_allow_html=True)
+    _fc1, _fc2, _fc3 = st.columns([2, 1, 2])
+    with _fc2:
+        if st.button("Get Started →", type="primary", use_container_width=True, key="footer_login"):
+            st.session_state.page = "Login"
+            st.rerun()
 
 
 # ============================================================
