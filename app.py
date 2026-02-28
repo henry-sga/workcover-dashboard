@@ -1111,7 +1111,6 @@ if page == "Landing":
     st.markdown("---")
 
     # --- Animated Workflow ---
-    st.markdown('<div class="landing-section">', unsafe_allow_html=True)
     st.markdown('<h2 class="landing-section-title">How It Works — 3 Simple Steps</h2>', unsafe_allow_html=True)
     st.markdown('<p class="landing-section-sub" style="font-size:1.1rem; font-weight:600; color:#1E3A5F;">Never miss documentation again.</p>', unsafe_allow_html=True)
 
@@ -1362,7 +1361,9 @@ elif page == "Login":
                     st.warning("Please enter both username and password")
 
         st.markdown("")
-        st.markdown('<div style="text-align:center;"><a href="?nav=landing" target="_parent" style="color:#6C757D; font-size:0.85rem;">← Back to home</a></div>', unsafe_allow_html=True)
+        if st.button("← Back to home", use_container_width=True, key="login_back_home"):
+            st.session_state.page = "Landing"
+            st.rerun()
 
         st.markdown("")
         st.info("**Demo login:** username `admin` / password `admin123`")
