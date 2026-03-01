@@ -233,8 +233,9 @@ st.markdown("""
         border-color: var(--primary-light) !important;
     }
 
-    /* Case card buttons (full-width clickable rows) */
-    .stButton > button[data-testid="stBaseButton-secondary"] {
+    /* Case card / alert buttons (full-width clickable rows) */
+    .stButton > button[data-testid="stBaseButton-secondary"],
+    .stButton > button:not([kind="primary"]) {
         text-align: left !important;
         justify-content: flex-start !important;
         padding: 10px 14px !important;
@@ -247,7 +248,8 @@ st.markdown("""
         line-height: 1.4 !important;
         font-size: 0.85rem !important;
     }
-    .stButton > button[data-testid="stBaseButton-secondary"]:hover {
+    .stButton > button[data-testid="stBaseButton-secondary"]:hover,
+    .stButton > button:not([kind="primary"]):hover {
         border-color: var(--accent) !important;
         box-shadow: 0 2px 6px rgba(74,144,217,0.12) !important;
         background: #F5F8FF !important;
@@ -1024,10 +1026,6 @@ if page == "Landing":
         <h1>ClaimTrack Pro</h1>
         <p style="font-size:1.3rem; color:#FFFFFF; margin-bottom:0.3rem; font-weight:600;">Take Control of Your Workcover Claims</p>
         <p>The all-in-one platform that saves time, reduces premiums, and ensures you never miss a deadline.</p>
-        <div class="hero-buttons">
-            <a class="hero-btn hero-btn-primary" href="#roi-calc">Calculate Your Savings</a>
-            <a class="hero-btn hero-btn-login" href="?nav=login" target="_parent">Login →</a>
-        </div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -2497,12 +2495,7 @@ elif page == "Case Detail":
 # DASHBOARD PAGE
 # ============================================================
 elif page == "Dashboard":
-    # Title row with New Case button
-    title_col, btn_col = st.columns([4, 1])
-    title_col.title("ClaimTrack Pro — Dashboard")
-    if btn_col.button("➕ New Case", type="primary", use_container_width=True):
-        st.session_state.page = "New Case"
-        st.rerun()
+    st.title("ClaimTrack Pro — Dashboard")
 
     cases_df = get_cases_df()
     active = cases_df[cases_df["status"] == "Active"]
